@@ -14,4 +14,9 @@ See [yare.io](yare.io) for details on the game.
 * Add pest control (detect if anyone's lurking near base to keep it offline) & target them with soldiers
 * Move some config vars to top so can switch live (Mostly to enable earlier attack on inactive opponents)
 * Add scout mode - nominating a drone to sit near the enemy base and lock it down.
-
+* Correct scout position for alternate stars
+* Make scout nomination automated.
+* Fix hunter/killer mode (target)
+* Detect broken player bots and attack early rather than building up excessively. 
+* Retreat to recharge when low on power.
+* Make scouts less cowardly

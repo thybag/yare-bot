@@ -186,16 +186,15 @@ function act_scout(entity) {
 
 // Deciders
 function decideSoldier(entity)
-{	
-	// If I'm the scout
-	// or the scout is not set or dead
-	// and i'm full HP - go scout
-	if (
-		(memory['scout_id'] == entity.id() || !memory['scout_id'] || getSpirit(memory['scout_id']).hp == 0) 
-		&& entity.isFull()
-	) {
+{
+	// Check we have a scout, else become them if i'm full
+	if ((!memory['scout_id'] || getSpirit(memory['scout_id']).hp == 0) && entity.isFull()){
 		// Update who the scout is
 		memory['scout_id'] = entity.id();
+	}
+
+	// If I'm the scout
+	if (memory['scout_id'] == entity.id()) {
 		return 'scout';
 	}
 
