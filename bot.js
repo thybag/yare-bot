@@ -162,7 +162,16 @@ function act_scout(entity) {
 	}
 
 	// Sit just off the side if we can
-	let location = [enemy_base.position[0]-(entity.range*2),enemy_base.position[1]]
+	let location;
+
+	if (memory['my_star'].id == 'star_a1c') {
+		// If lower star, offset to the right
+		location = [enemy_base.position[0]+(entity.range*2)-30,enemy_base.position[1]];
+	} else {
+		// if supper star, offset to the left
+		location = [enemy_base.position[0]-(entity.range*2),enemy_base.position[1]];
+	}
+	
 	entity.move(location);
 
 	// Then sit
