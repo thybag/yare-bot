@@ -4,8 +4,8 @@
 attack_min_size = 30;
 // trigger all out attack with every drone
 all_for_one_and_one_for_all = false;
-// Nominate Scout
-scout_name = my_spirits[1].id;
+// Retreat from attacking if energy is less than
+retreat_energy = 3;
 
 /**
  * Run - called each tick on entities
@@ -51,7 +51,7 @@ function run(entity) {
 
 /**
  * Init entity - new entity has been created
- * Currently this just desigantes the drone as either worker or soldier.
+ * Currently this just designates the drone as either worker or soldier.
  */
 function init(entity) {
 	entity.type = (i % 2 === 0) ? 'worker' : 'soldier';
@@ -59,7 +59,7 @@ function init(entity) {
 }
 
 /**
- * Act - Carry out choosen action type
+ * Act - Carry out chosen action type
  */
 function act(entity) {
 	// Carry out action based on decision.
@@ -99,6 +99,7 @@ function act_harvest(entity) {
 
 // Attack mode - go fight our enemeys
 function act_attack(entity) {
+
 	// fight any enemies
 	if (entity.enemyInSight()) {
 		let target = entity.findClosestEnemyInSight();
@@ -107,6 +108,12 @@ function act_attack(entity) {
 			return;
 		}
 	}
+
+	// Retreat (go harvest)
+	if (entity.energy() < retreat_energy) {
+		return 'harvest';
+	}
+
 	// Else go for the base!
 	if (!entity.inRange(enemy_base)) {
 		entity.move(enemy_base.position);
@@ -118,7 +125,7 @@ function act_attack(entity) {
 
 // Defend mode - fight off attackers.
 function act_defending(entity) {
-	// Attack closest in sight enemey.
+	// Attack closest in sight enemy.
 	// If no targets, go charge
 	// If in range, fire, else move towards them.
 
@@ -143,11 +150,11 @@ function act_target(entity) {
 		return 'charge';
 	}
 
-	if (entity.inRange(target)) {
-		entity.energize(target);
+	if (entity.inRange(entity.target)) {
+		entity.energize(entity.target);
 		return;
 	}
-	entity.move(target.position);
+	entity.move(entity.target.position);
 }
 
 // Scout mode - try and lock down someones base
@@ -177,17 +184,28 @@ function act_scout(entity) {
 	// Then sit
 }
 
-
 // Deciders
 function decideSoldier(entity)
 {	
-	// Go lock down their base
-	if (scout_name && scout_name == entity.id()) {
+	// If I'm the scout
+	// or the scout is not set or dead
+	// and i'm full HP - go scout
+	if (
+		(memory['scout_id'] == entity.id() || !memory['scout_id'] || getSpirit(memory['scout_id']).hp == 0) 
+		&& entity.isFull()
+	) {
+		// Update who the scout is
+		memory['scout_id'] = entity.id();
 		return 'scout';
 	}
 
 	// Attack mode triggered when we have 30 ships
-	if (memory['live'] > attack_min_size && entity.isFull()) {
+	if (memory['stats'].total_player_live_entities > attack_min_size && entity.isFull()) {
+		return 'attack';
+	}
+
+	// Detect short game mode. If total_enemey_entities is still 7 when we have 10, assume player is dead & attack
+	if (memory['stats'].total_player_live_entities > 10 && memory['stats'].total_enemey_entities == 7 && entity.isFull() ) {
 		return 'attack';
 	}
 
@@ -221,10 +239,12 @@ function decideWorker(entity)
 }
 
 
+// Default scout
+if(!memory['scout_id']) memory['scout_id'] = null;
 
 /**
- * Yaro Util Methods
- * Impliment your until logic as
+ * Yare.io Util Methods
+ * Implement your until logic as
  *
  * init(entity) - called when new enitity is created
  * run(entity) - called each tick on live entities
@@ -232,7 +252,7 @@ function decideWorker(entity)
  * 
  * Additional data points
  * memory['ticks'] - current game tick
- * memory['live'] - current live player entities
+ * memory['stats'] - Figures such as total_player_live_entities
  * memory['my_star'] - your star
  */
 
@@ -255,6 +275,11 @@ function Entity(spirit, type = 'drone') {
 	// Get current id
 	this.id = function() {
 		return this.spirit.id;
+	}
+
+	// Get HP
+	this.hp = function() {
+		return this.spirit.hp;
 	}
 
 	// Get current size
@@ -359,53 +384,51 @@ function Entity(spirit, type = 'drone') {
 
 // Init memory trackers
 if(!memory['ticks']) memory['ticks'] = 0;
-if(!memory['live']) memory['live'] = 0;
 if(!memory['my_star']) memory['my_star'] = (getDistance(base, star_a1c) > getDistance(base, star_zxq)) ? star_zxq : star_a1c;
+stats = {
+	total_entities:0,
+	total_live_entities:0,
+	total_player_entities:0,
+	total_player_live_entities:0,
+	total_enemey_entities:0,
+	total_enemey_live_entities:0
+};
 
 // Count ticks
 memory['ticks']++;
 
-// Get debug totals
-total_entities=0;
-total_live_entities=0;
-total_player_entities=0;
-total_player_live_entities=0;
-total_enemey_entities=0;
-total_enemey_live_entities=0;
-
 // Get quick & dirty counts
 Object.values(spirits).forEach(v => {
-	total_entities++;
+	stats.total_entities++;
 
 	// Track entities from differnt teams
 	if (v.player_id == base.player_id) {
-		total_player_entities++;
+		stats.total_player_entities++;
 	} else {
-		total_enemey_entities++;
+		stats.total_enemey_entities++;
 	}
 
-	// Track live from differnt teams
+	// Track live from different teams
 	if (v.hp > 0) {
-		total_live_entities++;
+		stats.total_live_entities++;
 
 		if(v.player_id == base.player_id) {
-			total_player_live_entities++;
+			stats.total_player_live_entities++;
 		} else {
-			total_enemey_live_entities++;
+			stats.total_enemey_live_entities++;
 		}
 	}
 });
 
+memory['stats'] = stats;
+
 // Console overview
 console.log(`
 	Tick ${memory['ticks']}, 
-	Total: ${total_live_entities}/${total_entities}, 
-	Player:  ${total_player_live_entities}/${total_player_entities},
-	Enemies:  ${total_enemey_live_entities}/${total_enemey_entities}
+	Player:  ${memory['stats'].total_player_live_entities}/${memory['stats'].total_player_entities},
+	Enemies:  ${memory['stats'].total_enemey_live_entities}/${memory['stats'].total_enemey_entities}
+	Total: ${memory['stats'].total_live_entities}/${memory['stats'].total_entities}, 
 `);
-
-// Save currently live so we can act on it.
-memory['live'] = total_player_live_entities;
 
 // Call tick on each player spirit, set up new spirits if they don't yet exist.
 for (i=0; i<my_spirits.length; i++) {
