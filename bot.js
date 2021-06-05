@@ -5,7 +5,7 @@ attack_min_size = 30;
 // trigger all out attack with every drone
 all_for_one_and_one_for_all = false;
 // Nominate Scout
-scout_name = false;
+scout_name = my_spirits[1].id;
 
 /**
  * Run - called each tick on entities
