@@ -57,6 +57,8 @@ function act(entity) {
 			return act_harvest(entity);
 		case 'attack':
 			return act_attack(entity);
+		case 'target':
+			return act_target(entity);
 	}
 }
 
@@ -116,6 +118,21 @@ function act_defending(entity) {
 	}
 }
 
+// Charge mode - recharge base to make more
+function act_target(entity) {
+	// Return to normal if target is missing/dead
+	if (!entity.target || entity.target.hp == 0) {
+		entity.target = null;
+		return 'charge';
+	}
+
+	if (entity.inRange(target)) {
+		entity.energize(target);
+		return;
+	}
+	entity.move(target.position);
+}
+
 // Deciders
 function decideSoldier(entity)
 {
@@ -124,9 +141,16 @@ function decideSoldier(entity)
 		return 'attack';
 	}
 
+	if (base.sight.enemies.length > 0) {
+		entity.target = getSpirit(base.sight.enemies[0]);
+		return 'target';
+	}
+
 	// Else act as worker
 	return decideWorker(entity);
 }
+
+
 
 function decideWorker(entity)
 {
