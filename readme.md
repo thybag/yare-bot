@@ -12,5 +12,6 @@ See [yare.io](yare.io) for details on the game.
 
 ### Change log
 * Add pest control (detect if anyone's lurking near base to keep it offline) & target them with soldiers
-
+* Move some config vars to top so can switch live (Mostly to enable earlier attack on inactive opponents)
+* Add scout mode - nominating a drone to sit near the enemy base and lock it down.
 

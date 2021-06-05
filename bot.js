@@ -1,3 +1,12 @@
+// Config vars
+
+// Switch soldier to attack mode when active unit's 'is above this number
+attack_min_size = 30;
+// trigger all out attack with every drone
+all_for_one_and_one_for_all = false;
+// Nominate Scout
+scout_name = false;
+
 /**
  * Run - called each tick on entities
  *
@@ -11,6 +20,12 @@
  *  * Status: logs current status of each drone
  */
 function run(entity) {
+
+	// Swap all workers to soldier.
+	if (all_for_one_and_one_for_all) {
+		entity.type = 'soldier';
+	}
+
 	let newAction;
 	// Worker action
 	if (entity.type == 'worker') {
@@ -59,6 +74,8 @@ function act(entity) {
 			return act_attack(entity);
 		case 'target':
 			return act_target(entity);
+		case 'scout':
+			return act_scout(entity);
 	}
 }
 
@@ -82,7 +99,7 @@ function act_harvest(entity) {
 
 // Attack mode - go fight our enemeys
 function act_attack(entity) {
-	// fight any enemeys
+	// fight any enemies
 	if (entity.enemyInSight()) {
 		let target = entity.findClosestEnemyInSight();
 		if (entity.inRange(target)) {
@@ -133,14 +150,39 @@ function act_target(entity) {
 	entity.move(target.position);
 }
 
+// Scout mode - try and lock down someones base
+function act_scout(entity) {
+	// Defend itself if someones in range
+	if (entity.enemyInSight()) {
+		let target = entity.findClosestEnemyInSight();
+		if (entity.inRange(target)) {
+			entity.energize(target);
+			return;
+		}
+	}
+
+	// Sit just off the side if we can
+	let location = [enemy_base.position[0]-(entity.range*2),enemy_base.position[1]]
+	entity.move(location);
+
+	// Then sit
+}
+
+
 // Deciders
 function decideSoldier(entity)
-{
+{	
+	// Go lock down their base
+	if (scout_name && scout_name == entity.id()) {
+		return 'scout';
+	}
+
 	// Attack mode triggered when we have 30 ships
-	if (memory['live'] > 30  && entity.isFull()) {
+	if (memory['live'] > attack_min_size && entity.isFull()) {
 		return 'attack';
 	}
 
+	// Chase away anyone locking down the base
 	if (base.sight.enemies.length > 0) {
 		entity.target = getSpirit(base.sight.enemies[0]);
 		return 'target';
@@ -149,8 +191,6 @@ function decideSoldier(entity)
 	// Else act as worker
 	return decideWorker(entity);
 }
-
-
 
 function decideWorker(entity)
 {
@@ -190,7 +230,7 @@ function decideWorker(entity)
 function Entity(spirit, type = 'drone') {
 	// core data
 	this.spirit = spirit;
-	this.range = 195;
+	this.range = 196;
 
 	// Use data
 	this.type = type;
