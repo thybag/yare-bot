@@ -12,6 +12,10 @@ scout_count = 1;
 scout_attack = false;
 // make scouts merge when they reach final location
 merge_scouts = false;
+// Scout run
+scout_run = false;
+// Defend the base
+hold_the_line = false;
 
 /**
  * Run - called each tick on entities
@@ -84,6 +88,8 @@ function act(entity) {
 			return act_scout(entity);
 		case 'chain':
 			return act_chain_chargers(entity);
+		case 'base':
+			return act_base_defence(entity);
 	}
 }
 
@@ -92,30 +98,42 @@ function act_chain_chargers(entity) {
 	let placement = getChainPlacement();
 	entity.role = placement.role;
 
-	if (!positionsMatch(placement.position)) {
+	// Move to target position
+	if (!positionsMatch(entity.position(), placement.position)) {
 		entity.move(placement.position);
 	}
 
+	// Note:
+	// isFull & energize maintain a prediected charge for each spirit.
+	// this should mean everything with avoid overcharging where possible by default
+
+	// Collect enegry from sun & give it to linkers!
 	if (entity.role == 'havester') {
-		if (entity.isFull()) {
-			// Find someone with room to charge
-			let friend = findChainChargeTarget(entity, 'linker');
-			if (friend) {
-				entity.energize(friend);
-			} 
-		} else {
+		// If in range of the base, charge it directly
+		if (entity.inRangeOfBase()) return entity.energize(base);
+
+		// Else if i have space, charge my self up
+		if (entity.inRangeOfStar() && !entity.isFull()) { // isFull
 			// If in range start charging
-			if (entity.inRangeOfStar()) entity.energize(memory['my_star']);
+			entity.energize(memory['my_star']);
+		} else {
+			// If i don't pass it on
+			let friend = findChainChargeTarget(entity, 'linker');
+			if (friend) entity.energize(friend);
 		}
-		return;
 	}
 
+	// Get power to the feeders
 	if (entity.role == 'linker') {
- 		// Just find someone to pass charge on too
+		// If in range of the base, charge it directly
+		if (entity.inRangeOfBase()) return entity.energize(base);
+
+ 		// Else find someone to pass charge on too
 		let friend = findChainChargeTarget(entity, 'feeder');
 		if (friend) entity.energize(friend);
 	}
 
+	// Feed the beast!
 	if (entity.role == 'feeder') {
 		// Try and get charge in the base
 		if (entity.inRangeOfBase()) entity.energize(base);
@@ -174,7 +192,7 @@ function act_defending(entity) {
 	let target = entity.findClosestEnemyInSight();
 	if (!target) {
 		// No more targets, set action to charge
-		return 'charge';
+		return 'harvest';
 	}
 
 	if (entity.inRange(target)) {
@@ -183,6 +201,25 @@ function act_defending(entity) {
 		entity.move(target.position);
 	}
 }
+
+// Defend mode - fight off attackers.
+function act_base_defence(entity) {
+	// Attack closest in sight enemy.
+	// If no targets, go charge
+	// If in range, fire, else move towards them.
+
+	let target = entity.findClosestEnemyInSight();
+	if (target) {
+		if (entity.inRange(target)) {
+			entity.energize(target);
+		}
+	}
+
+	// Head to the base
+	entity.move(base.position);
+}
+
+
 
 // Charge mode - recharge base to make more
 function act_target(entity) {
@@ -208,7 +245,14 @@ function act_scout(entity) {
 		return;
 	}
 
+	// Go recharge
+	if (scout_run) {
+		act_harvest(entity)
+		return;
+	}
+
 	if (entity.isEmpty()) {
+		// @todo remove self from scout list
 		return 'harvest';
 	}
 
@@ -243,7 +287,14 @@ function act_scout(entity) {
 	}
 }
 
-// Deciders
+/** 
+ *  UNIT TYPE deciders.
+ *  - Soldier logic
+ *  - Worker logic
+ * 
+ * @param  {[type]} entity [description]
+ * @return {[type]}        [description]
+ */
 function decideSoldier(entity)
 {
 	// Check we have a scout, else become them if i'm full
@@ -256,6 +307,9 @@ function decideSoldier(entity)
 	if (memory['scout_ids'].includes(entity.id())) {
 		return 'scout';
 	}
+
+	// Defencive mode
+	if(hold_the_line) return 'base';
 
 	// Attack mode triggered when we have 30 ships
 	if (memory['stats'].total_player_live_entities > attack_min_size) {
@@ -279,6 +333,9 @@ function decideSoldier(entity)
 
 function decideWorker(entity)
 {
+	// Defencive mode
+	if(hold_the_line) return 'base';
+
 	if (entity.enemyInSight() && !entity.isEmpty()) {
 		// Go charge base if full
     	return "defending";
