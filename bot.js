@@ -6,6 +6,8 @@ attack_min_size = 30;
 all_for_one_and_one_for_all = false;
 // Retreat from attacking if energy is less than
 retreat_energy = 3;
+// Amount of scouts to keep harassing enemy
+scout_count = 1;
 
 /**
  * Run - called each tick on entities
@@ -173,14 +175,13 @@ function act_scout(entity) {
 
 	if (memory['my_star'].id == 'star_a1c') {
 		// If lower star, offset to the right
-		location = [enemy_base.position[0]+(entity.range*2)-30,enemy_base.position[1]];
+		location = [enemy_base.position[0]+(entity.range*2)-60,enemy_base.position[1]-200];
 	} else {
-		// if supper star, offset to the left
-		location = [enemy_base.position[0]-(entity.range*2),enemy_base.position[1]];
+		// if upper star, offset to the left
+		location = [enemy_base.position[0]-(entity.range*2)+50,enemy_base.position[1]+200];
 	}
 	
 	entity.move(location);
-
 	// Then sit
 }
 
@@ -188,13 +189,13 @@ function act_scout(entity) {
 function decideSoldier(entity)
 {
 	// Check we have a scout, else become them if i'm full
-	if ((!memory['scout_id'] || getSpirit(memory['scout_id']).hp == 0) && entity.isFull()){
+	if ((!memory['scout_ids'] || memory['scout_ids'].length <= scout_count) && entity.isFull()){
 		// Update who the scout is
-		memory['scout_id'] = entity.id();
+		memory['scout_ids'].push(entity.id());
 	}
 
 	// If I'm the scout
-	if (memory['scout_id'] == entity.id()) {
+	if (memory['scout_ids'].includes(entity.id())) {
 		return 'scout';
 	}
 
@@ -226,7 +227,7 @@ function decideWorker(entity)
    	// Go charge base if full
     } else if (entity.isFull()){
 		return "charge";
-	// Go havest enegery if empty
+	// Go harvest energy if empty
 	} else if (entity.isEmpty()) {
 		return "harvest";
 	// No action? fallback to charge
@@ -239,7 +240,9 @@ function decideWorker(entity)
 
 
 // Default scout
-if(!memory['scout_id']) memory['scout_id'] = null;
+if(!memory['scout_ids']) memory['scout_ids'] = [];
+// Clean out dead scouts.
+memory['scout_ids'] = memory['scout_ids'].filter(s => getSpirit(s).hp != 0);
 
 /**
  * Yare.io Util Methods
@@ -247,7 +250,7 @@ if(!memory['scout_id']) memory['scout_id'] = null;
  *
  * init(entity) - called when new enitity is created
  * run(entity) - called each tick on live entities
- * Both are called passed "Entity" wrapper that contains variety of util methods & will store data persistantly.
+ * Both are called passed "Entity" wrapper that contains variety of util methods & will store data persistently.
  * 
  * Additional data points
  * memory['ticks'] - current game tick
@@ -258,7 +261,7 @@ if(!memory['scout_id']) memory['scout_id'] = null;
 function Entity(spirit, type = 'drone') {
 	// core data
 	this.spirit = spirit;
-	this.range = 196;
+	this.range = 197;
 
 	// Use data
 	this.type = type;
