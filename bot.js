@@ -82,7 +82,44 @@ function act(entity) {
 			return act_target(entity);
 		case 'scout':
 			return act_scout(entity);
+		case 'chain':
+			return act_chain_chargers(entity);
 	}
+}
+
+function act_chain_chargers(entity) {
+
+	let placement = getChainPlacement();
+	entity.role = placement.role;
+
+	if (!positionsMatch(placement.position)) {
+		entity.move(placement.position);
+	}
+
+	if (entity.role == 'havester') {
+		if (entity.isFull()) {
+			// Find someone with room to charge
+			let friend = findChainChargeTarget(entity, 'linker');
+			if (friend) {
+				entity.energize(friend);
+			} 
+		} else {
+			// If in range start charging
+			if (entity.inRangeOfStar()) entity.energize(memory['my_star']);
+		}
+		return;
+	}
+
+	if (entity.role == 'linker') {
+ 		// Just find someone to pass charge on too
+		let friend = findChainChargeTarget(entity, 'feeder');
+		if (friend) entity.energize(friend);
+	}
+
+	if (entity.role == 'feeder') {
+		// Try and get charge in the base
+		if (entity.inRangeOfBase()) entity.energize(base);
+	} 
 }
 
 // Charge mode - recharge base to make more
@@ -105,7 +142,6 @@ function act_harvest(entity) {
 
 // Attack mode - go fight our enemeys
 function act_attack(entity) {
-
 	// fight any enemies
 	if (entity.enemyInSight()) {
 		let target = entity.findClosestEnemyInSight();
@@ -158,7 +194,6 @@ function act_target(entity) {
 
 	if (entity.inRange(entity.target)) {
 		entity.energize(entity.target);
-		return;
 	}
 	entity.move(entity.target.position);
 }
@@ -182,7 +217,6 @@ function act_scout(entity) {
 		let target = entity.findClosestEnemyInSight();
 		if (entity.inRange(target)) {
 			entity.energize(target);
-			return;
 		}
 	}
 
@@ -224,12 +258,12 @@ function decideSoldier(entity)
 	}
 
 	// Attack mode triggered when we have 30 ships
-	if (memory['stats'].total_player_live_entities > attack_min_size && entity.isFull()) {
+	if (memory['stats'].total_player_live_entities > attack_min_size) {
 		return 'attack';
 	}
 
 	// Detect short game mode. If total_enemey_entities is still 7 when we have 10, assume player is dead & attack
-	if (memory['stats'].total_player_live_entities > 10 && memory['stats'].total_enemey_entities == 7 && entity.isFull() ) {
+	if (memory['stats'].total_player_live_entities > 10 && memory['stats'].total_enemey_entities == 7) {
 		return 'attack';
 	}
 
@@ -244,6 +278,23 @@ function decideSoldier(entity)
 }
 
 function decideWorker(entity)
+{
+	if (entity.enemyInSight() && !entity.isEmpty()) {
+		// Go charge base if full
+    	return "defending";
+    } else {
+    	return 'chain';
+    }
+
+    // Fallback
+	if (!entity.action) {
+		return "chain";
+	}
+
+	return false;
+}
+
+function decideLegacyWorker(entity)
 {
 	// Defend if attackers seen & we're charged
 	if (entity.enemyInSight() && !entity.isEmpty()){
@@ -262,11 +313,38 @@ function decideWorker(entity)
 	return false;
 }
 
-
 // Default scout
 if(!memory['scout_ids']) memory['scout_ids'] = [];
 // Clean out dead scouts.
 memory['scout_ids'] = memory['scout_ids'].filter(s => getSpirit(s).hp != 0);
+
+// Calculate chain
+// 2 1 1
+
+
+
+	// Find entities with a given role that are not yet full.
+function findChainChargeTarget(entity, role) {
+	if(entity.spirit.sight.friends.length === 0) return false;
+
+	// Get visible & work of distance of each
+	let potentials = entity.spirit.sight.friends
+	.filter(name => {
+		let ent = getEntity(name);
+		return (ent && !ent.isFull() && ent.role == role);
+	});
+
+	if(potentials.length == 0) return false;
+
+	return potentials.map(name => {
+		let spirit = getSpirit(name);
+		return {dist: entity.getDistanceFrom(spirit), ref: spirit}
+	// Find whos closest
+	}).reduce((prev, curr) => {
+		return prev.dist < curr.dist ? prev : curr;
+	}).ref;
+}
+
 
 /**
  * Yare.io Util Methods
@@ -291,7 +369,7 @@ function Entity(spirit, type = 'drone') {
 	this.type = type;
 	this.action = null;
 	this.target = null;
-	this.data = {}
+	this.role = null;
 
 	// Run actions for spirit
 	this.tick = function (tick){
@@ -325,12 +403,35 @@ function Entity(spirit, type = 'drone') {
 
 	// energize
 	this.energize = function(target){
-		// Apply computed damage so we know if its worth attacking
+		// Apply predicted damage so we know if its worth attacking
 		if (memory['sprite_power_map'][target.id]) {
-			memory['sprite_power_map'][target.id] -= this.size() * 2;
+			// apply prediected power cost
+			memory['sprite_power_map'][this.id()] -= this.size(); 
+
+			// If charging, apply additional power
+			if (target.player_id == base.player_id) {
+				memory['sprite_power_map'][target.id] += this.size();
+			} else {
+				// apply predicted damage
+				memory['sprite_power_map'][target.id] -= this.size() * 2; 
+			}
 		}
 
 		this.spirit.energize(target);
+	}
+
+	// Is full
+	this.isFull = function(predicted = true) {
+		if (predicted) return memory['sprite_power_map'][this.id()] == this.spirit.energy_capacity;
+
+		return this.spirit.energy == this.spirit.energy_capacity;
+	}
+
+	// Is Empty
+	this.isEmpty = function(predicted = true) {
+		if (predicted) return memory['sprite_power_map'][this.id()] == 0;
+
+		return this.spirit.energy == 0;
 	}
 
 	// move
@@ -416,19 +517,9 @@ function Entity(spirit, type = 'drone') {
 		return (this.getDistanceFrom(target) < this.range);
 	}
 
-	// Is full
-	this.isFull = function() {
-		return this.spirit.energy == this.spirit.energy_capacity;
-	}
-
-	// Is Empty
-	this.isEmpty = function() {
-		return this.spirit.energy == 0;
-	}
-
 	// Report status to console
 	this.status = function() {
-		console.log(this.type + '.' +this.spirit.id + ' (Size: '+ this.spirit.size + ', HP: '+this.spirit.hp+', Power: ' +this.spirit.energy+'/'+this.spirit.energy_capacity+') ' + this.action);
+		console.log(this.type + '.' +this.spirit.id + ' (Size: '+ this.spirit.size + ', HP: '+this.spirit.hp+', Power: ' +this.spirit.energy+'/'+this.spirit.energy_capacity+') ' + this.action + '.' + this.role);
 	}
 }
 
@@ -477,7 +568,35 @@ memory['stats'] = stats;
 // So we don't keep fireing at enemeys we already killed
 memory['sprite_power_map'] = sprite_power_map;
 
+//if(!memory['charge_chain_setup']) {
+	memory['charge_chain_setup'] = [
+		{role:'havester', position: positionOnLine(memory['my_star'], base, -195)},
+		{role:'linker', position: positionOnLine(memory['my_star'], base, -340)},
+		{role:'feeder', position: positionOnLine(memory['my_star'], base, -520)}
+	];
+//}
+
+chain_count=1;
+
+function getChainPlacement() {
+	
+	let pos = chain_count % 4;
+	chain_count++;
+ 
+ 	if (pos <= 1) {
+ 		return memory['charge_chain_setup'][0];
+ 	}
+ 	if (pos == 2) {
+ 		return memory['charge_chain_setup'][1];
+ 	}
+ 	if (pos == 3) {
+ 		return memory['charge_chain_setup'][2];
+ 	}
+ 	
+}
+
 // Console overview
+
 console.log(`
 	Tick ${memory['ticks']}, 
 	Player:  ${memory['stats'].total_player_live_entities}/${memory['stats'].total_player_entities},
@@ -503,10 +622,26 @@ for (i=0; i<my_spirits.length; i++) {
 
 console.log(memory['sprite_power_map']);
 
+
 function positionsMatch(a, b){
 	if(!a || !b) return false;
 	return (Math.round(a[0]) == Math.round(b[0]) && Math.round(a[1]) == Math.round(b[1]));
 }
+
+function positionOnLine(a, b, distance)
+{	
+	let xd = a.position[0]-b.position[0];
+    let yd = a.position[1]-b.position[1];
+    let line_dist = Math.sqrt(Math.pow(xd,2) + Math.pow(yd,2));
+
+    let proportion = distance / line_dist;
+
+    return [
+    	a.position[0] + (xd * proportion),
+  	 	a.position[1] + (yd * proportion)
+   ]
+}
+
 
 
 // Util Methods
@@ -520,4 +655,7 @@ function getDistance(a, b)
 // Get spirit
 function getSpirit(eid) {
 	return spirits[eid];
+}
+function getEntity(eid) {
+	return memory[eid];
 }
