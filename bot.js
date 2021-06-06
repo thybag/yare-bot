@@ -8,13 +8,13 @@ all_for_one_and_one_for_all = false;
 retreat_energy = 3;
 // Amount of scouts to keep harassing enemy
 scout_count = 1;
-// Make scouts attack
+// Make scouts attack the base
 scout_attack = false;
 // make scouts merge when they reach final location
 merge_scouts = false;
-// Scout run
+// Trigger scout to run away
 scout_run = false;
-// Defend the base
+// Send all units to defend the base. Something bads coming.
 hold_the_line = false;
 
 /**
@@ -41,6 +41,7 @@ function run(entity) {
 	if (entity.type == 'worker') {
 		if (newAction = decideWorker(entity)) entity.action = newAction;
 	}
+
 	// Soldier action
 	if (entity.type == 'soldier') {
 		if (newAction = decideSoldier(entity)) entity.action = newAction;
@@ -51,7 +52,7 @@ function run(entity) {
 
 	// If currently set action can no longer be continued, a new action will be returned to swap too
 	if (overrideAction) {
-		console.log("Action override: " + overrideAction);
+		console.log("Action " + newAction + " override to " + overrideAction);
 		entity.action = overrideAction;	
 	}
 	
@@ -144,7 +145,6 @@ function act_chain_chargers(entity) {
 function act_charge(entity) {
 	if (!entity.inRangeOfBase()) {
 		entity.move(base.position);
-		return;
 	}
 	entity.energize(base);
 }
@@ -153,7 +153,6 @@ function act_charge(entity) {
 function act_harvest(entity) {
 	if(!entity.inRangeOfStar()) {
 		entity.move(memory['my_star'].position);
-		return;
 	}
 	entity.energize(memory['my_star']);
 }
@@ -252,7 +251,8 @@ function act_scout(entity) {
 	}
 
 	if (entity.isEmpty()) {
-		// @todo remove self from scout list
+		// If scout is empty, go recharge
+		memory['scout_ids'].splice(memory['scout_ids'].indexOf(entity.id()), 1);
 		return 'harvest';
 	}
 
@@ -309,15 +309,15 @@ function decideSoldier(entity)
 	}
 
 	// Defencive mode
-	if(hold_the_line) return 'base';
+	if (hold_the_line) return 'base';
 
 	// Attack mode triggered when we have 30 ships
-	if (memory['stats'].total_player_live_entities > attack_min_size) {
+	if (memory['stats'].total_player_live_entities > attack_min_size && entity.isFull()) {
 		return 'attack';
 	}
 
 	// Detect short game mode. If total_enemey_entities is still 7 when we have 10, assume player is dead & attack
-	if (memory['stats'].total_player_live_entities > 10 && memory['stats'].total_enemey_entities == 7) {
+	if (memory['stats'].total_player_live_entities > 10 && memory['stats'].total_enemey_entities == 7 && entity.isFull()) {
 		return 'attack';
 	}
 
@@ -625,31 +625,25 @@ memory['stats'] = stats;
 // So we don't keep fireing at enemeys we already killed
 memory['sprite_power_map'] = sprite_power_map;
 
-//if(!memory['charge_chain_setup']) {
+if(!memory['charge_chain_setup']) {
 	memory['charge_chain_setup'] = [
 		{role:'havester', position: positionOnLine(memory['my_star'], base, -195)},
 		{role:'linker', position: positionOnLine(memory['my_star'], base, -340)},
 		{role:'feeder', position: positionOnLine(memory['my_star'], base, -520)}
 	];
-//}
+}
 
-chain_count=1;
+chain_count=0;
 
 function getChainPlacement() {
 	
 	let pos = chain_count % 4;
 	chain_count++;
  
- 	if (pos <= 1) {
- 		return memory['charge_chain_setup'][0];
- 	}
- 	if (pos == 2) {
- 		return memory['charge_chain_setup'][1];
- 	}
- 	if (pos == 3) {
- 		return memory['charge_chain_setup'][2];
- 	}
- 	
+ 	if (pos==0) return memory['charge_chain_setup'][0];
+ 	if (pos==1) return memory['charge_chain_setup'][1];
+ 	if (pos==2) return memory['charge_chain_setup'][2];
+ 	if (pos==3) return memory['charge_chain_setup'][0];
 }
 
 // Console overview
