@@ -8,6 +8,10 @@ all_for_one_and_one_for_all = false;
 retreat_energy = 3;
 // Amount of scouts to keep harassing enemy
 scout_count = 1;
+// Make scouts attack
+scout_attack = false;
+// make scouts merge when they reach final location
+merge_scouts = false;
 
 /**
  * Run - called each tick on entities
@@ -161,6 +165,18 @@ function act_target(entity) {
 
 // Scout mode - try and lock down someones base
 function act_scout(entity) {
+
+	// Scout war
+	if (scout_attack) {
+		// Act as attacker
+		act_attack(entity);
+		return;
+	}
+
+	if (entity.isEmpty()) {
+		return 'harvest';
+	}
+
 	// Defend itself if someones in range
 	if (entity.enemyInSight()) {
 		let target = entity.findClosestEnemyInSight();
@@ -180,16 +196,24 @@ function act_scout(entity) {
 		// if upper star, offset to the left
 		location = [enemy_base.position[0]-(entity.range*2)+50,enemy_base.position[1]+200];
 	}
-	
-	entity.move(location);
-	// Then sit
+
+	if (!positionsMatch(location, entity.position())) {
+		entity.move(location);
+	} else {
+		if (!merge_scouts) return;
+		// Form up
+		let f = entity.findClosestFriendInSight();
+		if (f && entity.inRange(f)) {
+			entity.spirit.merge(f);
+		}
+	}
 }
 
 // Deciders
 function decideSoldier(entity)
 {
 	// Check we have a scout, else become them if i'm full
-	if ((!memory['scout_ids'] || memory['scout_ids'].length <= scout_count) && entity.isFull()){
+	if ((!memory['scout_ids'] || memory['scout_ids'].length < scout_count) && entity.isFull()){
 		// Update who the scout is
 		memory['scout_ids'].push(entity.id());
 	}
@@ -261,7 +285,7 @@ memory['scout_ids'] = memory['scout_ids'].filter(s => getSpirit(s).hp != 0);
 function Entity(spirit, type = 'drone') {
 	// core data
 	this.spirit = spirit;
-	this.range = 197;
+	this.range = 198;
 
 	// Use data
 	this.type = type;
@@ -301,6 +325,11 @@ function Entity(spirit, type = 'drone') {
 
 	// energize
 	this.energize = function(target){
+		// Apply computed damage so we know if its worth attacking
+		if (memory['sprite_power_map'][target.id]) {
+			memory['sprite_power_map'][target.id] -= this.size() * 2;
+		}
+
 		this.spirit.energize(target);
 	}
 
@@ -317,6 +346,11 @@ function Entity(spirit, type = 'drone') {
 	// Get my position
 	this.position = function(){
 		return this.spirit.position;
+	}
+
+	// Merge
+	this.merge = function(target) {
+		this.spirit.merge(target);
 	}
 
 	// Find closest friend in sight
@@ -340,17 +374,31 @@ function Entity(spirit, type = 'drone') {
 
 	// Find closest enemy in sight
 	this.findClosestEnemyInSight = function() {
+		// No one in sight
 		if(this.spirit.sight.enemies.length === 0) return false;
 
-		// Get closest
-		// Get visible & work of distance of each
-		return this.spirit.sight.enemies.map(name => {
-			let spirit = getSpirit(name);
-			return {dist: this.getDistanceFrom(spirit), ref: spirit}
-		// Find whos closest
-		}).reduce((prev, curr) => {
+		// Get closest valid target within sight
+		let results = this.spirit.sight.enemies
+			// Only include sprites we consider to be still alive (no point killing em twice)
+			.filter(name => {
+				return memory['sprite_power_map'][name] > -1;
+			})
+			// Get spirit distance so we target nearest first.
+			.map(name => {
+				let spirit = getSpirit(name);
+				return {
+					dist: this.getDistanceFrom(spirit),
+					ref: spirit
+				}
+			});
+
+		if(results.length == 0) return false;
+
+		// If we have a valid target, get our closest friend
+		return results.reduce((prev, curr) => {
 			return prev.dist < curr.dist ? prev : curr;
-		}).ref;
+		})
+		.ref;
 	}
 
 	// In charge range of base?
@@ -398,10 +446,12 @@ stats = {
 
 // Count ticks
 memory['ticks']++;
+sprite_power_map = {}; 
 
 // Get quick & dirty counts
 Object.values(spirits).forEach(v => {
 	stats.total_entities++;
+	sprite_power_map[v.id] = v.energy;
 
 	// Track entities from differnt teams
 	if (v.player_id == base.player_id) {
@@ -423,6 +473,9 @@ Object.values(spirits).forEach(v => {
 });
 
 memory['stats'] = stats;
+// Use to count out dmg applied over tick
+// So we don't keep fireing at enemeys we already killed
+memory['sprite_power_map'] = sprite_power_map;
 
 // Console overview
 console.log(`
@@ -447,6 +500,14 @@ for (i=0; i<my_spirits.length; i++) {
 		memory[ent.id].tick(memory['ticks']);
 	} 
 }
+
+console.log(memory['sprite_power_map']);
+
+function positionsMatch(a, b){
+	if(!a || !b) return false;
+	return (Math.round(a[0]) == Math.round(b[0]) && Math.round(a[1]) == Math.round(b[1]));
+}
+
 
 // Util Methods
 function getDistance(a, b)
