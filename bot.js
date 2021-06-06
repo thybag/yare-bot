@@ -1,21 +1,36 @@
-// Config vars
+/****************************************************
+ * Toggles
+ * 
+ * This bot is designed to run autonomously, but if you want more direct control does
+ * still offer a number of toggle options to manually react to certain circumstances
+ * or just tweak some the behaviors.
+ *
+ ****************************************************/
 
-// Switch soldier to attack mode when active unit's 'is above this number
+// Option: Number of units at which soldier will switch to attack mode
 attack_min_size = 30;
-// trigger all out attack with every drone
-all_for_one_and_one_for_all = false;
-// Retreat from attacking if energy is less than
+// Option: Energy level that should trigger a drone retreating
 retreat_energy = 3;
-// Amount of scouts to keep harassing enemy
+// Option:Amount of scouts to try and lock down the enemy base
 scout_count = 1;
-// Make scouts attack the base
+
+// Mode: Turn every drone in to a soldier in case you need an all out attack
+all_for_one_and_one_for_all = false;
+// Mode: Scouts will now attack the base
 scout_attack = false;
-// make scouts merge when they reach final location
+// Mode: scouts merge together when they reach final location
 merge_scouts = false;
-// Trigger scout to run away
+// Mode: Trigger scout to run away back towards your star
 scout_run = false;
-// Send all units to defend the base. Something bads coming.
+// Mode:  Send all units to defend the base. Something bad is coming.
 hold_the_line = false;
+
+
+/****************************************************
+ * Bot Code
+ * 
+ * This code implements the actual bot behaviors and logic
+ ****************************************************/
 
 /**
  * Run - called each tick on entities
@@ -105,11 +120,11 @@ function act_chain_chargers(entity) {
 	}
 
 	// Note:
-	// isFull & energize maintain a prediected charge for each spirit.
+	// isFull & energize maintain a predicted charge for each spirit.
 	// this should mean everything with avoid overcharging where possible by default
 
-	// Collect enegry from sun & give it to linkers!
-	if (entity.role == 'havester') {
+	// Collect energy from sun & give it to linkers!
+	if (entity.role == 'harvester') {
 		// If in range of the base, charge it directly
 		if (entity.inRangeOfBase()) return entity.energize(base);
 
@@ -378,9 +393,7 @@ memory['scout_ids'] = memory['scout_ids'].filter(s => getSpirit(s).hp != 0);
 // Calculate chain
 // 2 1 1
 
-
-
-	// Find entities with a given role that are not yet full.
+// Find entities with a given role that are not yet full.
 function findChainChargeTarget(entity, role) {
 	if(entity.spirit.sight.friends.length === 0) return false;
 
@@ -403,11 +416,21 @@ function findChainChargeTarget(entity, role) {
 }
 
 
+
+/****************************************************
+ * Yare.io Utility logic
+ * Simple API for entities, allowing for simplified state management along with 
+ * a selection of helper functions.
+ *
+ * This can be used to build your own bots.
+ ****************************************************/
+
+
 /**
  * Yare.io Util Methods
  * Implement your until logic as
  *
- * init(entity) - called when new enitity is created
+ * init(entity) - called when new entity is created
  * run(entity) - called each tick on live entities
  * Both are called passed "Entity" wrapper that contains variety of util methods & will store data persistently.
  * 
@@ -625,9 +648,10 @@ memory['stats'] = stats;
 // So we don't keep fireing at enemeys we already killed
 memory['sprite_power_map'] = sprite_power_map;
 
+// Calculate charge chain positions
 if(!memory['charge_chain_setup']) {
 	memory['charge_chain_setup'] = [
-		{role:'havester', position: positionOnLine(memory['my_star'], base, -195)},
+		{role:'harvester', position: positionOnLine(memory['my_star'], base, -195)},
 		{role:'linker', position: positionOnLine(memory['my_star'], base, -340)},
 		{role:'feeder', position: positionOnLine(memory['my_star'], base, -520)}
 	];
